@@ -1,0 +1,201 @@
+---
+title: "Practical Machine Learning Prediction Assignment"
+author: "Ozge Tugrul Sonmez"
+date: "December, 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+###1- Definition of the Goal of the Project
+
+The goal of this project is to find out and quantify how well people do their physical activities, using data from acceleometers on the belt,forearm,arm and dumbell of 6 participants.
+
+The training data https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv is partitioned for training and testing data for comparison of out of sample errors in different machine learning models.
+
+The testing data https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv is used for validation of the final machine learning classification model.
+
+###2- Data Preprocessing
+
+First of all, csv files are read. It can be seen from the data, that some of the variables are null. So, null values are replaced with NA's for the further operations on the data.
+
+```{r data Preprocessing}
+setwd("C:/Users/asus/Desktop/Practical Machine Learning/Course project")
+
+pml_training<-read.csv("pml-training.csv",header=TRUE,na.strings=c("","NA"))
+
+pml_testing<-read.csv("pml-testing.csv",header=TRUE,na.strings=c("","NA"))
+
+dim(pml_training)
+
+dim(pml_testing)
+
+```
+
+**Data Preparation**
+
+Decide which variables are going to be used in machine learning model. Remove the variables which include NA.
+
+```{r complete cases}
+ok_train<-complete.cases(t(pml_training))
+
+pml_training<-pml_training[,ok_train]
+
+ok_test<-complete.cases(t(pml_testing))
+
+pml_testing<-pml_testing[,ok_test]
+
+dim(pml_training)
+
+dim(pml_testing)
+```
+
+Since the first five variables are identification variables and these are unrelevant to the dependent class variable, these variables are removed from the data.
+
+```{r remove variables}
+
+pml_training<-pml_training[,-c(1:5)]
+
+pml_testing<-pml_testing[,-c(1:5)]
+
+dim(pml_training)
+
+dim(pml_testing)
+```
+
+###3- Data Sliding
+
+**Split the Data into Training and Test Set**
+
+Divide the pml_training data into training and testing data in order to compare model accuracies.
+
+```{r split data}
+library(ggplot2)
+library(caret)
+set.seed(1111)
+
+inTrain = createDataPartition(pml_training$classe, p=0.7,list=FALSE)
+training = pml_training[inTrain,]
+testing = pml_training[-inTrain,]
+
+dim(training)
+dim(testing)
+```
+
+###4- Machine Learning Models and Predictions
+
+####4.1 Predicting with Trees
+
+**Predicting with Trees using train() function**
+
+```{r trees with train}
+ctrl<- trainControl(method='cv', number = 5)
+
+rpart_train_model<-train(classe~.,data=training,method="rpart",trControl = ctrl)
+
+plot(rpart_train_model$finalModel,uniform=TRUE,main="Classification Tree")
+text(rpart_train_model$finalModel,use.n = TRUE,all=TRUE,cex=0.8)
+
+rpart_train_model_pred<-predict(rpart_train_model,testing)
+
+confusionMatrix(rpart_train_model_pred,testing$classe)
+```
+
+**Predicting with Trees using tree() function**
+
+```{r trees with tree}
+library(tree)
+
+tree_model<-tree(classe~.,data=training)
+tree_model_pred<-predict(tree_model,testing,type="class")
+
+confusionMatrix(tree_model_pred,testing$classe)
+
+```
+
+**Predicting with Trees using rpart() function**
+
+```{r trees with rpart}
+library(rpart)
+
+rpart_model<-rpart(classe~.,data=training,method="class")
+
+rpart_model_pred<-predict(rpart_model,testing,type="class")
+
+confusionMatrix(rpart_model_pred,testing$classe)
+
+```
+
+####4.2 Predicting with Random Forest
+
+**Predicting with Random Forest using train() function**
+
+```{r random forest with train}
+ctrl<- trainControl(method='cv', number = 5)
+rf_train_model<-train(classe~.,data=training,method="rf",trControl = ctrl)
+
+rf_train_model_pred<-predict(rf_train_model,testing)
+
+confusionMatrix(rf_train_model_pred,testing$classe)
+
+plot(varImp(rf_train_model))
+```
+
+**Predicting with Random Forest using randomForest() function**
+
+```{r random forest with randomForest}
+library(randomForest)
+
+rf_model<-randomForest(classe~.,data=training,importance=TRUE)
+rf_model_pred<-predict(rf_model,testing)
+
+confusionMatrix(rf_model_pred,testing$classe)
+varImpPlot(rf_model)
+```
+
+####4.3 Predicting with Generalized Boosted Model using train() function
+
+```{r generalized boosted with gbm}
+library(gbm)
+
+ctrl<- trainControl(method='cv', number = 5)
+
+boost_train_model<-train(classe~.,method="gbm",data=training,trControl = ctrl,verbose=FALSE)
+
+boost_train_model_pred<-predict(boost_train_model,testing)
+
+confusionMatrix(boost_train_model_pred,testing$classe)
+
+plot(varImp(boost_train_model))
+
+```
+
+###5- Final Model
+
+Since, the accuracy of the Random Forest prediction using train() function is higher than other models' accuracy on testing data, **rf_train_model** is chosen for predicting the **pml_testing** data.
+
+```{r final model}
+c<-confusionMatrix(rf_train_model_pred,testing$classe)
+final_model_accuracy<-c$overall[1]
+final_model_accuracy
+
+```
+
+###6- Evaluation of the Final Model Prediction Accuracy with Test Data.
+
+For each of the 20 observations in the **pml_testing** data, which are given for completing the Week 4 Practical Machine Learning Assignment Quiz, Final Model's (rf_train_model) prediction results are given below:
+
+```{r final model prediction}
+
+predict(rf_train_model,pml_testing)
+
+```
+
+
+
